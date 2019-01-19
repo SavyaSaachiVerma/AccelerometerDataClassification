@@ -1,0 +1,165 @@
+#ssverma2_source_code
+
+import random
+import matplotlib.pyplot as mplt
+import pandas as pnd
+import numpy as npy
+from os import listdir
+from os.path import isfile, join
+from sklearn.cluster import KMeans
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix
+from collections import defaultdict
+
+#stored all the files in a single folder all
+path = 'all/'
+files = [f for f in listdir(path) if isfile(join(path, f))]
+
+#function to divide the file files into sub signals of measurement 32 each
+
+def vectorCreate(file):
+        numEle = 0
+        vectorFeature = []
+        with open(file, 'r') as f:
+                for line in f:
+                        numEle += 1
+                        ele = line.split(' ')
+                        for values in ele:
+                                vectorFeature.append(int(values))
+                        if(numEle % 32 == 0):
+                                feature_list.append(vectorFeature)
+                                vectorFeature = []
+
+#function to find the actual class 
+
+def detClass(file):
+        if 'brush_teeth' in file:
+                return 1
+        elif 'climb_stairs' in file:
+                return 2
+        elif 'comb_hair' in file:
+                return 3
+        elif 'descend_stairs' in file:
+                return 4
+        elif 'drink_glass' in file:
+                return 5
+        elif 'eat_meat' in file:
+                return 6
+        elif 'eat_soup' in file:
+                return 7
+        elif 'getup_bed' in file:
+                return 8
+        elif 'liedown_bed' in file:
+                return 9
+        elif 'pour_water' in file:
+                return 10
+        elif 'sitdown_chair' in file:
+                return 11
+        elif 'standup_chair' in file:
+                return 12
+        elif 'use_telephone' in file:
+                return 13
+        elif 'walk' in file:
+                return 14
+
+def classPrediction(feature_list_item):
+        distance = []
+        for i in level2Flat:
+                distance.append(npy.linalg.norm(npy.array(feature_list_item) - npy.array(i)))
+
+        index = distance.index(min(distance))
+        return index
+
+#dividing data into 80% training and 20% test
+
+random.seed(1024)
+random.shuffle(files)
+dataTraining = files[:672]
+dataTest = files[672:]
+
+
+feature_list = []
+for file in dataTraining:
+        fileName = path + file
+        vectorCreate(fileName)
+
+level1 = KMeans(n_clusters = 48).fit(feature_list)
+level1Split = {i: npy.where(level1.labels_ == i)[0].tolist() for i in range(level1.n_clusters)}
+
+level2 = []
+totalClusters =0
+
+for i in level1Split:
+        dataset = []
+        for j in level1Split[i]:
+                dataset.append(feature_list[j])
+        if len(dataset) >= 10:
+                level2.append(KMeans(n_clusters = 10).fit(dataset).cluster_centers_.tolist())
+                totalClusters += 10
+        else:
+                level2.append(KMeans(n_clusters = len(dataset)).fit(dataset).cluster_centers_.tolist())
+                totalClusters += len(dataset)
+
+level2Flat = []
+for i in level2:
+        for j in i:
+                level2Flat.append(j)
+
+file_features = []
+labels = []
+
+for file in dataTraining:
+        feature_list = []
+        clusterDictonary = [0] * 480
+        fileName = path + file
+        vectorCreate(fileName)
+
+        prediction = []
+        for item in feature_list:
+                prediction.append(classPrediction(item))
+
+        for item in prediction:
+                clusterDictonary[item] += 1
+        labels.append(detClass(file))
+
+        file_features.append(clusterDictonary)
+
+#Using random forest classifier to train and test data
+
+random_forest_X = file_features
+random_forest_y = labels
+
+random_forest = RandomForestClassifier()
+random_forest.fit(random_forest_X, random_forest_y)
+
+actualClass = []
+predictedClass = []
+numEle = 0
+
+for file in dataTest:
+        feature_list = []
+        clusterDictonary = [0] * 480
+        fileName = path + file
+        vectorCreate(fileName)
+
+        prediction = []
+        for item in feature_list:
+                prediction.append(classPrediction(item))
+
+        for item in prediction:
+                clusterDictonary[item] += 1
+
+        actual_class = detClass(file)
+        actualClass.append(actual_class)
+        predicted_class = random_forest.predict([clusterDictonary])
+        predictedClass.append(predicted_class)
+
+        if actual_class == predicted_class:
+                numEle += 1
+
+confusion_matrix = confusion_matrix(actualClass, predictedClass)
+numTestFiles=167.0
+accuracy = numEle/numTestFiles;
+accuracy*=100;
+print (accuracy)
+print (confusion_matrix)
